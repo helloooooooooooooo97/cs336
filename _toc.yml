@@ -4,8 +4,8 @@ parts:
 parts:
   - caption: DAY0-课程介绍与资料
     chapters:
-      - file: note/day0
+      - file: note/0_intro
   - caption: DAY1-大模型基础
     chapters:
-      - file: note/day1
-      - file: day1/bpe
+      - file: note/1.1_bpe 
+      - file: note/1.2_transformer
