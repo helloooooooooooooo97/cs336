@@ -2,7 +2,9 @@ format: jb-book
 root: intro
 parts:
 parts:
+  - caption: DAY0-课程介绍与资料
+    chapters:
+      - file: note/day0
   - caption: DAY1-大模型基础
     chapters:
-      - file: note/day1_note 
-      - file: note/day1_code
+      - file: note/day1
