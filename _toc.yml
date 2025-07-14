@@ -1,0 +1,31 @@
+format: jb-book
+root: intro
+parts:
+  - caption: LC算法
+    chapters:
+      - file: algorithm_lc/decisiontree
+  - caption: AI算法
+    chapters:
+      - file: algorithm_ai/decisiontree
+  - caption: 论文
+    chapters:
+      - file: paper/
+  
+
+  - caption: 数据集
+    chapters:
+
+      - file: dataset/1_iris/intro
+        sections:
+          - file: dataset/1_iris/1_feature
+          - file: dataset/1_iris/2_decision_tree
+      
+      - file: dataset/2_tatanic/intro
+        sections:
+          - file: dataset/2_tatanic/detail 
+ 
+  - caption: 附录
+    chapters:
+      - file: appendix/markdown-notebooks
+      - file: appendix/markdown 
+      - file: appendix/notebooks 

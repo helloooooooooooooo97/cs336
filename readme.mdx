@@ -1,0 +1,38 @@
+# 使用说明
+
+本项目为 Python 项目，建议使用虚拟环境进行开发和运行。
+
+## 安装依赖
+
+1. 创建虚拟环境（可选）：
+   ```
+   python3 -m venv venv
+   ```
+   或者是
+   ```
+   python -m venv venv
+   ```
+2. 激活虚拟环境：
+   - Windows:
+     ```
+     venv\Scripts\activate
+     ```
+   - macOS/Linux:
+     ```
+     source venv/bin/activate
+     ```
+3. 安装依赖（如有 requirements.txt 文件）：
+   ```
+   pip3 install -r requirements.txt
+   ```
+   或者
+   ```
+   pip install -r requirements.txt
+   ```
+
+## 构建文档
+
+1. 使用 jupyter-book 构建文档：
+   ```
+   jupyter-book build .
+   ```
