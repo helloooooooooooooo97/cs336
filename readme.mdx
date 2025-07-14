@@ -36,3 +36,29 @@
    ```
    jupyter-book build .
    ```
+
+2. 更多常用命令示例：
+
+   - 预览生成的书籍（默认输出在 _build/html 文件夹）：
+     ```
+     open _build/html/index.html
+     ```
+     或在 Windows 下：
+     ```
+     start _build/html/index.html
+     ```
+
+   - 清理构建生成的文件：
+     ```
+     jupyter-book clean .
+     ```
+
+   - 检查文档配置和内容是否有问题：
+     ```
+     jupyter-book config sphinx .
+     ```
+
+   - 生成 PDF（需额外依赖）：
+     ```
+     jupyter-book build . --builder pdflatex
+     ```
