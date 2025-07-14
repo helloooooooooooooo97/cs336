@@ -379,7 +379,6 @@ def test_encode_special_token_double_newline_non_whitespace():
     assert tokenizer.decode(ids) == corpus_contents
     assert reference_tokenizer.decode(reference_ids) == corpus_contents
 
-
 def test_encode_iterable_tinystories_sample_roundtrip():
     tokenizer = get_tokenizer_from_vocab_merges_path(
         vocab_path=VOCAB_PATH,
@@ -462,3 +461,8 @@ def _encode(tokenizer, text):
     for just this function. We set the memory limit to 1MB.
     """
     return tokenizer.encode(text)
+
+def test_pass():
+    print(1+1)
+    # 测试1+1是否等于2
+    assert 1 + 1 == 2
