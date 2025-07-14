@@ -41,3 +41,8 @@ open:
 	else \
 		echo "请手动打开 _build/html/index.html"; \
 	fi
+
+book:
+	@# 打包成一本书（生成 HTML 和 PDF 版本）
+	jupyter-book build . --builder html
+	jupyter-book build . --builder pdfhtml || echo "PDF 构建失败，请检查依赖或配置"

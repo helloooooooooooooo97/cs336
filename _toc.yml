@@ -8,3 +8,4 @@ parts:
   - caption: DAY1-大模型基础
     chapters:
       - file: note/day1
+      - file: day1/bpe
