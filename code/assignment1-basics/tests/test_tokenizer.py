@@ -4,6 +4,7 @@ import json
 import os
 import resource
 import sys
+from tiktoken.core import Encoding
 
 import psutil
 import pytest
@@ -333,7 +334,7 @@ def test_tinystories_sample_roundtrip():
 
 
 def test_tinystories_matches_tiktoken():
-    reference_tokenizer = tiktoken.get_encoding("gpt2")
+    reference_tokenizer: Encoding = tiktoken.get_encoding("gpt2")
     tokenizer = get_tokenizer_from_vocab_merges_path(
         vocab_path=VOCAB_PATH, merges_path=MERGES_PATH, special_tokens=["<|endoftext|>"]
     )
