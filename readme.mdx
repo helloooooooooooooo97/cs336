@@ -62,3 +62,34 @@
      ```
      jupyter-book build . --builder pdflatex
      ```
+
+## makefile命令
+也可以使用下面这些makefile命令快速构建
+常用 makefile 命令如下：
+
+- 构建虚拟环境（只需执行一次）：
+  ```
+  make venv
+  ```
+
+- 安装依赖（需先构建虚拟环境）：
+  ```
+  make install
+  ```
+
+- 激活虚拟环境（需手动执行，命令会提示如何激活）：
+  ```
+  make activate
+  ```
+
+- 构建 jupyter-book 文档：
+  ```
+  make build
+  ```
+
+- 打开生成的 HTML 首页（根据操作系统自动判断）：
+  ```
+  make open
+  ```
+
+> 提示：如需查看所有可用命令，可运行 `make` 或查看 makefile 文件内容。
