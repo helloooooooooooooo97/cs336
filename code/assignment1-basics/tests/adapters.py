@@ -9,8 +9,6 @@ import numpy.typing as npt
 import torch
 from torch import Tensor
 
-from cs336_basics.tokenizer import Tokenizer
-
 def run_linear(
     d_in: int,
     d_out: int,
@@ -29,9 +27,13 @@ def run_linear(
     Returns:
         Float[Tensor, "... d_out"]: The transformed output of your linear module.
     """
+    # 使用Linear类来实现线性变换
+    from cs336_basics.transformer import Linear
+    linear = Linear(d_in, d_out, bias=False)
+    linear.weight.data = weights
+    return linear(in_features)
 
     raise NotImplementedError
-
 
 def run_embedding(
     vocab_size: int,
@@ -51,7 +53,10 @@ def run_embedding(
     Returns:
         Float[Tensor, "... d_model"]: Batch of embeddings returned by your Embedding layer.
     """
-
+    from cs336_basics.transformer import Embedding
+    embedding = Embedding(vocab_size, d_model)
+    embedding.weight.data = weights
+    return embedding(token_ids)
     raise NotImplementedError
 
 
@@ -84,6 +89,14 @@ def run_swiglu(
     # swiglu.w1.weight.data = w1_weight
     # swiglu.w2.weight.data = w2_weight
     # swiglu.w3.weight.data = w3_weight
+    from cs336_basics.transformer import SwiGLU
+    swiglu = SwiGLU(d_model, d_ff)
+    # 设置权重
+    swiglu.w1.weight.data = w1_weight    # diff * model 
+    swiglu.w2.weight.data = w3_weight    # diff * model  
+    swiglu.w3.weight.data = w2_weight    # model * diff
+    # 前向传播
+    return swiglu(in_features)
     raise NotImplementedError
 
 
@@ -139,6 +152,8 @@ def run_multihead_self_attention(
         Float[Tensor, " ... sequence_length d_out"]: Tensor with the output of running your optimized, batched multi-headed attention
         implementation with the given QKV projection weights and input features.
     """
+
+    
     raise NotImplementedError
 
 
@@ -393,6 +408,8 @@ def run_silu(in_features: Float[Tensor, " ..."]) -> Float[Tensor, " ..."]:
         Float[Tensor,"..."]: of with the same shape as `in_features` with the output of applying
         SiLU to each element.
     """
+
+    
     raise NotImplementedError
 
 
@@ -558,7 +575,7 @@ def get_tokenizer(
     Returns:
         A BPE tokenizer that uses the provided vocab, merges, and special tokens.
     """
-
+    from cs336_basics.tokenizer import Tokenizer
     return Tokenizer(vocab, merges, special_tokens)
     raise NotImplementedError
 
