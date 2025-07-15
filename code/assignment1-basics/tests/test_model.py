@@ -31,6 +31,7 @@ def test_linear(numpy_snapshot, ts_state_dict, in_embeddings, d_model, d_ff):
     )
 
 
+
 def test_embedding(numpy_snapshot, ts_state_dict, in_indices, vocab_size, d_model):
     embedding_weight = ts_state_dict[0][f"token_embeddings.weight"]
     output = run_embedding(

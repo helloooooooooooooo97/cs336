@@ -9,8 +9,6 @@ import numpy.typing as npt
 import torch
 from torch import Tensor
 
-
-
 def run_linear(
     d_in: int,
     d_out: int,
@@ -29,9 +27,13 @@ def run_linear(
     Returns:
         Float[Tensor, "... d_out"]: The transformed output of your linear module.
     """
+    # 使用Linear类来实现线性变换
+    from cs336_basics.model import Linear
+    linear = Linear(d_in, d_out, bias=False)
+    linear.weight.data = weights
+    return linear(in_features)
 
     raise NotImplementedError
-
 
 def run_embedding(
     vocab_size: int,
@@ -51,7 +53,10 @@ def run_embedding(
     Returns:
         Float[Tensor, "... d_model"]: Batch of embeddings returned by your Embedding layer.
     """
-
+    from cs336_basics.model import Embedding
+    embedding = Embedding(vocab_size, d_model)
+    embedding.weight.data = weights
+    return embedding(token_ids)
     raise NotImplementedError
 
 
@@ -84,6 +89,14 @@ def run_swiglu(
     # swiglu.w1.weight.data = w1_weight
     # swiglu.w2.weight.data = w2_weight
     # swiglu.w3.weight.data = w3_weight
+    from cs336_basics.model import SwiGLU
+    swiglu = SwiGLU(d_model, d_ff)
+    # 设置权重
+    swiglu.w1.weight.data = w1_weight    # diff * model 
+    swiglu.w2.weight.data = w3_weight    # diff * model  
+    swiglu.w3.weight.data = w2_weight    # model * diff
+    # 前向传播
+    return swiglu(in_features)
     raise NotImplementedError
 
 
@@ -94,18 +107,25 @@ def run_scaled_dot_product_attention(
     mask: Float[Tensor, " ... queries keys"] | None = None,
 ) -> Float[Tensor, " ... queries d_v"]:
     """
-    Given key (K), query (Q), and value (V) tensors, return
-    the output of your scaled dot product attention implementation.
-
-    Args:
-        Q (Float[Tensor, " ... queries d_k"]): Query tensor
-        K (Float[Tensor, " ... keys d_k"]): Key tensor
-        V (Float[Tensor, " ... values d_v"]): Values tensor
-        mask (Float[Tensor, " ... queries keys"] | None): Mask tensor
-    Returns:
-        Float[Tensor, " ... queries d_v"]: Output of SDPA
+    实现Scaled Dot-Product Attention。
+    Q: (..., queries, d_k)
+    K: (..., keys, d_k)
+    V: (..., values, d_v)
+    mask: (..., queries, keys) 或 None
+    返回: (..., queries, d_v)
     """
-    raise NotImplementedError
+    import torch
+    import torch.nn.functional as F
+
+    d_k = Q.shape[-1]
+    # 计算注意力分数 (..., queries, keys)
+    attn_scores = torch.matmul(Q, K.transpose(-2, -1)) / (d_k ** 0.5)
+    if mask is not None:
+        attn_scores = attn_scores.masked_fill(mask == 0, float('-inf'))
+    attn_weights = F.softmax(attn_scores, dim=-1)
+    # 加权求和得到输出 (..., queries, d_v)
+    output = torch.matmul(attn_weights, V)
+    return output
 
 
 def run_multihead_self_attention(
@@ -139,6 +159,8 @@ def run_multihead_self_attention(
         Float[Tensor, " ... sequence_length d_out"]: Tensor with the output of running your optimized, batched multi-headed attention
         implementation with the given QKV projection weights and input features.
     """
+
+    
     raise NotImplementedError
 
 
@@ -393,6 +415,8 @@ def run_silu(in_features: Float[Tensor, " ..."]) -> Float[Tensor, " ..."]:
         Float[Tensor,"..."]: of with the same shape as `in_features` with the output of applying
         SiLU to each element.
     """
+
+    
     raise NotImplementedError
 
 
@@ -538,11 +562,13 @@ def run_load_checkpoint(
     raise NotImplementedError
 
 
+from cs336_basics.tokenizer import Tokenizer
+
 def get_tokenizer(
     vocab: dict[int, bytes],
     merges: list[tuple[bytes, bytes]],
     special_tokens: list[str] | None = None,
-) -> Any:
+) -> Tokenizer:
     """Given a vocabulary, a list of merges, and a list of special tokens,
     return a BPE tokenizer that uses the provided vocab, merges, and special tokens.
 
@@ -558,6 +584,7 @@ def get_tokenizer(
     Returns:
         A BPE tokenizer that uses the provided vocab, merges, and special tokens.
     """
+    return Tokenizer(vocab, merges, special_tokens)
     raise NotImplementedError
 
 
