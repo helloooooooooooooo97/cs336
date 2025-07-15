@@ -28,7 +28,7 @@ def run_linear(
         Float[Tensor, "... d_out"]: The transformed output of your linear module.
     """
     # 使用Linear类来实现线性变换
-    from cs336_basics.transformer import Linear
+    from cs336_basics.model import Linear
     linear = Linear(d_in, d_out, bias=False)
     linear.weight.data = weights
     return linear(in_features)
@@ -53,7 +53,7 @@ def run_embedding(
     Returns:
         Float[Tensor, "... d_model"]: Batch of embeddings returned by your Embedding layer.
     """
-    from cs336_basics.transformer import Embedding
+    from cs336_basics.model import Embedding
     embedding = Embedding(vocab_size, d_model)
     embedding.weight.data = weights
     return embedding(token_ids)
@@ -89,7 +89,7 @@ def run_swiglu(
     # swiglu.w1.weight.data = w1_weight
     # swiglu.w2.weight.data = w2_weight
     # swiglu.w3.weight.data = w3_weight
-    from cs336_basics.transformer import SwiGLU
+    from cs336_basics.model import SwiGLU
     swiglu = SwiGLU(d_model, d_ff)
     # 设置权重
     swiglu.w1.weight.data = w1_weight    # diff * model 
@@ -107,18 +107,25 @@ def run_scaled_dot_product_attention(
     mask: Float[Tensor, " ... queries keys"] | None = None,
 ) -> Float[Tensor, " ... queries d_v"]:
     """
-    Given key (K), query (Q), and value (V) tensors, return
-    the output of your scaled dot product attention implementation.
-
-    Args:
-        Q (Float[Tensor, " ... queries d_k"]): Query tensor
-        K (Float[Tensor, " ... keys d_k"]): Key tensor
-        V (Float[Tensor, " ... values d_v"]): Values tensor
-        mask (Float[Tensor, " ... queries keys"] | None): Mask tensor
-    Returns:
-        Float[Tensor, " ... queries d_v"]: Output of SDPA
+    实现Scaled Dot-Product Attention。
+    Q: (..., queries, d_k)
+    K: (..., keys, d_k)
+    V: (..., values, d_v)
+    mask: (..., queries, keys) 或 None
+    返回: (..., queries, d_v)
     """
-    raise NotImplementedError
+    import torch
+    import torch.nn.functional as F
+
+    d_k = Q.shape[-1]
+    # 计算注意力分数 (..., queries, keys)
+    attn_scores = torch.matmul(Q, K.transpose(-2, -1)) / (d_k ** 0.5)
+    if mask is not None:
+        attn_scores = attn_scores.masked_fill(mask == 0, float('-inf'))
+    attn_weights = F.softmax(attn_scores, dim=-1)
+    # 加权求和得到输出 (..., queries, d_v)
+    output = torch.matmul(attn_weights, V)
+    return output
 
 
 def run_multihead_self_attention(
@@ -555,6 +562,8 @@ def run_load_checkpoint(
     raise NotImplementedError
 
 
+from cs336_basics.tokenizer import Tokenizer
+
 def get_tokenizer(
     vocab: dict[int, bytes],
     merges: list[tuple[bytes, bytes]],
@@ -575,7 +584,6 @@ def get_tokenizer(
     Returns:
         A BPE tokenizer that uses the provided vocab, merges, and special tokens.
     """
-    from cs336_basics.tokenizer import Tokenizer
     return Tokenizer(vocab, merges, special_tokens)
     raise NotImplementedError
 
