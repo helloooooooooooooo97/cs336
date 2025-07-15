@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from cs336_basics.tokenizer import Tokenizer
 import json
 import os
 import resource
@@ -367,7 +368,7 @@ def test_encode_special_token_trailing_newlines():
 
 def test_encode_special_token_double_newline_non_whitespace():
     reference_tokenizer = tiktoken.get_encoding("gpt2")
-    tokenizer = get_tokenizer_from_vocab_merges_path(
+    tokenizer: Tokenizer = get_tokenizer_from_vocab_merges_path(
         vocab_path=VOCAB_PATH, merges_path=MERGES_PATH, special_tokens=["<|endoftext|>"]
     )
     corpus_path = FIXTURES_PATH / "special_token_double_newlines_non_whitespace.txt"
