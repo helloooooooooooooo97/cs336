@@ -1,4 +1,3 @@
-
 from .tokenizer import Tokenizer
 
 __all__ = [

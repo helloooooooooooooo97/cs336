@@ -5,10 +5,6 @@ import torch.nn as nn
 from jaxtyping import Float
 from torch import Tensor
 
-def silu(x: torch.Tensor) -> torch.Tensor:
-    return x * torch.sigmoid(x)
-
-# forward不改变shape
 class RMSNorm(nn.Module):
     def __init__(self, d_model: int, eps: float = 1e-5) -> None:
         super().__init__()
