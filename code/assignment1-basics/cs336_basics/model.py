@@ -1,3 +1,5 @@
+from torch._tensor import Tensor
+from torch._tensor import Tensor
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -5,43 +7,8 @@ from typing import Optional
 from jaxtyping import Float, Int
 from torch import Tensor
 
-
-class Linear(nn.Module):
-    def __init__(self, d_in: int, d_out: int, bias: bool = True) -> None:
-        super().__init__()
-        self.weight: Float[Tensor, "d_out d_in"] = nn.Parameter(torch.empty(d_out, d_in))  # 权重参数，形状为(d_out, d_in)
-        if bias:
-            self.bias: Optional[Float[Tensor, "d_out"]] = nn.Parameter(torch.empty(d_out))  # 偏置参数，形状为(d_out,)
-        else:
-            self.bias = None
-        # 使用Kaiming均匀分布初始化权重参数，a=5**0.5是LeCun推荐的参数
-        nn.init.kaiming_uniform_(self.weight, a=5 ** 0.5)
-        # 如果有偏置参数，则将偏置初始化为0
-        if self.bias is not None:
-            nn.init.zeros_(self.bias)
-
-    def forward(self, x: Float[Tensor, "... d_in"]) -> Float[Tensor, "... d_out"]:
-        # x: (..., d_in)
-        # weight: (d_out, d_in)
-        # bias: (d_out,)
-        y = x @ self.weight.t()
-        if self.bias is not None:
-            y = y + self.bias
-        return y
-
-# 将token id 转换为 token 向量，这里的layer需要训练吗？
-# [1,2,3]转换成对应的的嵌入向量[[token ID = 1 对应的向量],[token ID = 2 对应的向量],[token ID = 3 对应的向量]]
-class Embedding(nn.Module):
-    def __init__(self, num_embeddings: int, embedding_dim: int) -> None:
-        super().__init__()
-        self.weight: Float[Tensor, "num_embeddings embedding_dim"] = nn.Parameter(torch.empty(num_embeddings, embedding_dim))
-        nn.init.normal_(self.weight, mean=0.0, std=embedding_dim ** -0.5)
-
-    def forward(self, x: Int[Tensor, "..."]) -> Float[Tensor, "... embedding_dim"]:
-        # x: (...), int64，表示token的索引
-        # 返回: (..., embedding_dim)，每个token索引对应一个embedding向量
-        return self.weight[x]
-
+from .model_attention import MultiheadSelfAttention 
+from .model_basic import Linear, Embedding
 
 """
 SwiGLU是一种用于Transformer中前馈神经网络（FFN）部分的激活结构，全称为SwiGLU（Swish-Gated Linear Unit）。
@@ -111,38 +78,6 @@ class RMSNorm(nn.Module):
         norm = x.norm(dim=-1, keepdim=True) * (x.shape[-1] ** -0.5)
         return x / (norm + self.eps) * self.weight
 
-# 多头自注意力机制
-class MultiheadSelfAttention(nn.Module):
-    def __init__(self, d_model: int, num_heads: int) -> None:
-        super().__init__()
-        assert d_model % num_heads == 0
-        self.d_model: int = d_model
-        self.num_heads: int = num_heads
-        self.d_head: int = d_model // num_heads
-        self.q_proj: Linear = Linear(d_model, d_model)
-        self.k_proj: Linear = Linear(d_model, d_model)
-        self.v_proj: Linear = Linear(d_model, d_model)
-        self.o_proj: Linear = Linear(d_model, d_model)
-
-    def forward(
-        self, 
-        x: Float[Tensor, "batch seq d_model"], 
-        mask: Optional[Float[Tensor, "batch num_heads seq seq"]] = None
-    ) -> Float[Tensor, "batch seq d_model"]:
-        batch, seq, d_model = x.shape
-        q : Tensor = self.q_proj(x).view(batch, seq, self.num_heads, self.d_head).transpose(1, 2) # (batch, nheads, seq, d_head)
-        k : Tensor = self.k_proj(x).view(batch, seq, self.num_heads, self.d_head).transpose(1, 2) # (batch, nheads, seq, d_head)
-        v : Tensor = self.v_proj(x).view(batch, seq, self.num_heads, self.d_head).transpose(1, 2) # (batch, nheads, seq, d_head)
-        att = (q @ k.transpose(-2, -1)) / (self.d_head ** 0.5)  # (batch, nheads, seq, seq) 最后两个维度代表两个点的相似度关系
-        if mask is not None: 
-            att = att.masked_fill(mask == 0, float('-inf')) 
-        att = F.softmax(att, dim=-1) 
-        out : Tensor = att @ v   # (batch, nheads, seq, d_head) 
-        out = out.transpose(1, 2).contiguous().reshape(batch, seq, d_model)  
-        # (batch, seq, nheads, d_head) 
-        # (batch, seq, d_model) 
-        return self.o_proj(out)
-
 class TransformerBlock(nn.Module):
     def __init__(self, d_model: int, num_heads: int, d_ff: int) -> None:
         super().__init__()
@@ -184,9 +119,8 @@ class Transformer(nn.Module):
     ) -> None:
         super().__init__()
         self.token_emb: Embedding = Embedding(vocab_size, d_model)
-        self.layers: nn.ModuleList = nn.ModuleList([
-            TransformerBlock(d_model, n_heads, d_ff) for _ in range(n_layers)
-        ])
+        # 不要用nn.ModuleList类型注释，直接用List[TransformerBlock]
+        self.layers: list[TransformerBlock] = [TransformerBlock(d_model, n_heads, d_ff) for _ in range(n_layers)]
         self.ln_f: RMSNorm = RMSNorm(d_model)
         self.lm_head: Linear = Linear(d_model, vocab_size, bias=False)
 

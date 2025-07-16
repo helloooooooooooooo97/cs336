@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import os
+from torch._tensor import Tensor
+from torch._tensor import Tensor
 from typing import IO, Any, BinaryIO
 from collections.abc import Iterable
 from jaxtyping import Float, Int
@@ -9,6 +11,7 @@ import numpy.typing as npt
 import torch
 from torch import Tensor
 
+# pass
 def run_linear(
     d_in: int,
     d_out: int,
@@ -35,6 +38,7 @@ def run_linear(
 
     raise NotImplementedError
 
+# pass
 def run_embedding(
     vocab_size: int,
     d_model: int,
@@ -59,7 +63,7 @@ def run_embedding(
     return embedding(token_ids)
     raise NotImplementedError
 
-
+# pass
 def run_swiglu(
     d_model: int,
     d_ff: int,
@@ -99,7 +103,7 @@ def run_swiglu(
     return swiglu(in_features)
     raise NotImplementedError
 
-
+# pass
 def run_scaled_dot_product_attention(
     Q: Float[Tensor, " ... queries d_k"],
     K: Float[Tensor, " ... keys d_k"],
@@ -107,26 +111,19 @@ def run_scaled_dot_product_attention(
     mask: Float[Tensor, " ... queries keys"] | None = None,
 ) -> Float[Tensor, " ... queries d_v"]:
     """
-    实现Scaled Dot-Product Attention。
-    Q: (..., queries, d_k)
-    K: (..., keys, d_k)
-    V: (..., values, d_v)
-    mask: (..., queries, keys) 或 None
-    返回: (..., queries, d_v)
+    该函数实现了 Scaled Dot-Product Attention（缩放点积注意力）机制，是 Transformer 架构中的核心组件之一。
+    其主要作用是根据输入的查询（Q）、键（K）、值（V）以及可选的掩码（mask），计算注意力分数，并输出加权后的值向量。
+
+    具体流程如下：
+    1. 计算 Q 和 K 的点积，并除以 sqrt(d_k) 进行缩放，得到注意力分数（attn_scores）。
+    2. 如果提供了 mask，则将不需要关注的位置分数设为负无穷，防止其参与 softmax。
+    3. 对注意力分数进行 softmax，得到注意力权重（attn_weights）。
+    4. 用注意力权重对 V 进行加权求和，得到最终的输出。
+
+    该机制能够让模型根据输入序列中不同位置的信息动态调整关注的重点，从而提升建模能力。
     """
-    import torch
-    import torch.nn.functional as F
-
-    d_k = Q.shape[-1]
-    # 计算注意力分数 (..., queries, keys)
-    attn_scores = torch.matmul(Q, K.transpose(-2, -1)) / (d_k ** 0.5)
-    if mask is not None:
-        attn_scores = attn_scores.masked_fill(mask == 0, float('-inf'))
-    attn_weights = F.softmax(attn_scores, dim=-1)
-    # 加权求和得到输出 (..., queries, d_v)
-    output = torch.matmul(attn_weights, V)
-    return output
-
+    from cs336_basics.model_attention import scaled_dot_product_attention
+    return scaled_dot_product_attention(Q, K, V, mask)
 
 def run_multihead_self_attention(
     d_model: int,
@@ -136,7 +133,7 @@ def run_multihead_self_attention(
     v_proj_weight: Float[Tensor, " d_v d_in"],
     o_proj_weight: Float[Tensor, " d_model d_v"],
     in_features: Float[Tensor, " ... sequence_length d_in"],
-) -> Float[Tensor, " ... sequence_length d_out"]:
+) -> Float[Tensor, " ... sequence_length d_model"]:
     """
     Given the key, query, and value projection weights of a naive unbatched
     implementation of multi-head attention, return the output of an optimized batched
@@ -159,10 +156,14 @@ def run_multihead_self_attention(
         Float[Tensor, " ... sequence_length d_out"]: Tensor with the output of running your optimized, batched multi-headed attention
         implementation with the given QKV projection weights and input features.
     """
+    from cs336_basics.model import MultiheadSelfAttention
+    attn = MultiheadSelfAttention(d_model, num_heads)
+    attn.q_proj.weight.data.copy_(q_proj_weight)
+    attn.k_proj.weight.data.copy_(k_proj_weight)
+    attn.v_proj.weight.data.copy_(v_proj_weight)
+    attn.o_proj.weight.data.copy_(o_proj_weight)
 
-    
-    raise NotImplementedError
-
+    return attn(in_features)
 
 def run_multihead_self_attention_with_rope(
     d_model: int,
@@ -175,7 +176,7 @@ def run_multihead_self_attention_with_rope(
     o_proj_weight: Float[Tensor, " d_model d_v"],
     in_features: Float[Tensor, " ... sequence_length d_in"],
     token_positions: Int[Tensor, " ... sequence_length"] | None = None,
-) -> Float[Tensor, " ... sequence_length d_out"]:
+) -> Float[Tensor, " ... sequence_length d_model"]:
     """
     Given the key, query, and value projection weights of a naive unbatched
     implementation of multi-head attention, return the output of an optimized batched
@@ -201,8 +202,34 @@ def run_multihead_self_attention_with_rope(
         Float[Tensor, " ... sequence_length d_out"]: Tensor with the output of running your optimized, batched multi-headed attention
         implementation with the given QKV projection weights and input features.
     """
-    raise NotImplementedError
-
+    from cs336_basics.model import MultiheadSelfAttention
+    import torch
+    attn = MultiheadSelfAttention(d_model, num_heads)
+    attn.q_proj.weight.data = q_proj_weight
+    attn.k_proj.weight.data = k_proj_weight
+    attn.v_proj.weight.data = v_proj_weight
+    attn.o_proj.weight.data = o_proj_weight
+    # 先做QK投影
+    batch_shape = in_features.shape[:-2]
+    seq_len = in_features.shape[-2]
+    q = attn.q_proj(in_features)
+    k = attn.k_proj(in_features)
+    v = attn.v_proj(in_features)
+    # reshape为多头
+    d_head = d_model // num_heads
+    q = q.view(*batch_shape, seq_len, num_heads, d_head).transpose(-3, -2)  # (..., num_heads, seq_len, d_head)
+    k = k.view(*batch_shape, seq_len, num_heads, d_head).transpose(-3, -2)
+    # RoPE
+    if token_positions is not None:
+        q = run_rope(d_head, theta, max_seq_len, q, token_positions)
+        k = run_rope(d_head, theta, max_seq_len, k, token_positions)
+    # 继续后续注意力
+    v = v.view(*batch_shape, seq_len, num_heads, d_head).transpose(-3, -2)
+    att = torch.matmul(q, k.transpose(-2, -1)) / (d_head ** 0.5)
+    att = torch.softmax(att, dim=-1)
+    out: Tensor = torch.matmul(att, v)
+    out = out.transpose(-3, -2).contiguous().view(*batch_shape, seq_len, d_model)
+    return attn.o_proj(out)
 
 def run_rope(
     d_k: int,
@@ -223,7 +250,29 @@ def run_rope(
     Returns:
         Float[Tensor, " ... sequence_length d_k"]: Tensor with RoPEd input.
     """
-    raise NotImplementedError
+    import torch
+    # RoPE实现，参考 handout
+    # in_query_or_key: (..., seq_len, d_k)
+    # token_positions: (..., seq_len)
+    # 只对最后一维做旋转
+    half_dim = d_k // 2
+    seq_len = in_query_or_key.shape[-2]
+    pos = token_positions
+    # 计算旋转角度
+    inv_freq = 1.0 / (theta ** (torch.arange(0, half_dim, device=in_query_or_key.device, dtype=in_query_or_key.dtype) / half_dim))
+    sinusoid_inp = torch.einsum('... n, d -> ... n d', pos, inv_freq)  # (..., seq_len, half_dim)
+    sin = torch.sin(sinusoid_inp)
+    cos = torch.cos(sinusoid_inp)
+    x1 = in_query_or_key[..., :half_dim]
+    x2 = in_query_or_key[..., half_dim:half_dim*2]
+    # 旋转
+    out1 = x1 * cos - x2 * sin
+    out2 = x1 * sin + x2 * cos
+    out = torch.cat([out1, out2], dim=-1)
+    # 如果d_k是奇数，拼上剩下的
+    if d_k % 2 == 1:
+        out = torch.cat([out, in_query_or_key[..., -1:]], dim=-1)
+    return out
 
 
 def run_transformer_block(
@@ -296,7 +345,19 @@ def run_transformer_block(
         Float[Tensor, "batch sequence_length d_model"] Tensor with the output of
         running the Transformer block on the input features while using RoPE.
     """
-    raise NotImplementedError
+    from cs336_basics.model import TransformerBlock
+    block = TransformerBlock(d_model, num_heads, d_ff)
+    # 加载权重
+    block.attn.q_proj.weight.data = weights['attn.q_proj.weight']
+    block.attn.k_proj.weight.data = weights['attn.k_proj.weight']
+    block.attn.v_proj.weight.data = weights['attn.v_proj.weight']
+    block.attn.o_proj.weight.data = weights['attn.output_proj.weight']
+    block.ln1.weight.data = weights['ln1.weight']
+    block.ffn.w1.weight.data = weights['ffn.w1.weight']
+    block.ffn.w2.weight.data = weights['ffn.w2.weight']
+    block.ffn.w3.weight.data = weights['ffn.w3.weight']
+    block.ln2.weight.data = weights['ln2.weight']
+    return block(in_features)
 
 
 def run_transformer_lm(
@@ -378,7 +439,25 @@ def run_transformer_lm(
         Float[Tensor, "batch_size sequence_length vocab_size"]: Tensor with the predicted unnormalized
         next-word distribution for each token.
     """
-    raise NotImplementedError
+    from cs336_basics.model import Transformer
+    model = Transformer(vocab_size, d_model, num_layers, num_heads, d_ff)
+    # 加载权重
+    model.token_emb.weight.data = weights['token_embeddings.weight']
+    for i in range(num_layers):
+        prefix = f'layers.{i}.'
+        block = model.layers[i]
+        block.attn.q_proj.weight.data = weights[prefix+'attn.q_proj.weight']
+        block.attn.k_proj.weight.data = weights[prefix+'attn.k_proj.weight']
+        block.attn.v_proj.weight.data = weights[prefix+'attn.v_proj.weight']
+        block.attn.o_proj.weight.data = weights[prefix+'attn.output_proj.weight']
+        block.ln1.weight.data = weights[prefix+'ln1.weight']
+        block.ffn.w1.weight.data = weights[prefix+'ffn.w1.weight']
+        block.ffn.w2.weight.data = weights[prefix+'ffn.w2.weight']
+        block.ffn.w3.weight.data = weights[prefix+'ffn.w3.weight']
+        block.ln2.weight.data = weights[prefix+'ln2.weight']
+    model.ln_f.weight.data = weights['ln_final.weight']
+    model.lm_head.weight.data = weights['lm_head.weight']
+    return model(in_indices)
 
 
 def run_rmsnorm(
@@ -401,7 +480,10 @@ def run_rmsnorm(
         Float[Tensor,"... d_model"]: Tensor of with the same shape as `in_features` with the output of running
         RMSNorm of the `in_features`.
     """
-    raise NotImplementedError
+    from cs336_basics.model import RMSNorm
+    rmsnorm = RMSNorm(d_model, eps)
+    rmsnorm.weight.data = weights
+    return rmsnorm(in_features)
 
 
 def run_silu(in_features: Float[Tensor, " ..."]) -> Float[Tensor, " ..."]:
@@ -415,9 +497,8 @@ def run_silu(in_features: Float[Tensor, " ..."]) -> Float[Tensor, " ..."]:
         Float[Tensor,"..."]: of with the same shape as `in_features` with the output of applying
         SiLU to each element.
     """
-
-    
-    raise NotImplementedError
+    import torch
+    return torch.nn.functional.silu(in_features)
 
 
 def run_get_batch(
