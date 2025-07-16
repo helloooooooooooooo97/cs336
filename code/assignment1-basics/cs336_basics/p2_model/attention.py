@@ -6,9 +6,8 @@ import torch.nn.functional as F
 from typing import Optional
 from jaxtyping import Float
 from torch import Tensor
-from einops import einsum, rearrange
-from .model_basic import Linear
-from .model_basic import Linear
+from einops import rearrange
+from .linear import Linear
 
 def scaled_dot_product_attention(
     q: Float[Tensor, "batch nheads seq d_head"], 

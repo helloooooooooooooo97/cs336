@@ -11,6 +11,9 @@ import numpy.typing as npt
 import torch
 from torch import Tensor
 
+import cs336_basics.p1_tokenizer as my_tokenizer 
+import cs336_basics.p2_model as my_model
+
 # pass
 def run_linear(
     d_in: int,
@@ -31,8 +34,7 @@ def run_linear(
         Float[Tensor, "... d_out"]: The transformed output of your linear module.
     """
     # 使用Linear类来实现线性变换
-    from cs336_basics.model import Linear
-    linear = Linear(d_in, d_out, bias=False)
+    linear = my_model.Linear(d_in, d_out, bias=False)
     linear.weight.data = weights
     return linear(in_features)
 
@@ -57,8 +59,7 @@ def run_embedding(
     Returns:
         Float[Tensor, "... d_model"]: Batch of embeddings returned by your Embedding layer.
     """
-    from cs336_basics.model import Embedding
-    embedding = Embedding(vocab_size, d_model)
+    embedding = my_model.Embedding(vocab_size, d_model)
     embedding.weight.data = weights
     return embedding(token_ids)
     raise NotImplementedError
@@ -93,8 +94,7 @@ def run_swiglu(
     # swiglu.w1.weight.data = w1_weight
     # swiglu.w2.weight.data = w2_weight
     # swiglu.w3.weight.data = w3_weight
-    from cs336_basics.model import SwiGLU
-    swiglu = SwiGLU(d_model, d_ff)
+    swiglu = my_model.SwiGLU(d_model, d_ff)
     # 设置权重
     swiglu.w1.weight.data = w1_weight    # diff * model 
     swiglu.w2.weight.data = w3_weight    # diff * model  
@@ -122,8 +122,7 @@ def run_scaled_dot_product_attention(
 
     该机制能够让模型根据输入序列中不同位置的信息动态调整关注的重点，从而提升建模能力。
     """
-    from cs336_basics.model_attention import scaled_dot_product_attention
-    return scaled_dot_product_attention(Q, K, V, mask)
+    return my_model.scaled_dot_product_attention(Q, K, V, mask)
 
 def run_multihead_self_attention(
     d_model: int,
@@ -156,7 +155,7 @@ def run_multihead_self_attention(
         Float[Tensor, " ... sequence_length d_out"]: Tensor with the output of running your optimized, batched multi-headed attention
         implementation with the given QKV projection weights and input features.
     """
-    from cs336_basics.model import MultiheadSelfAttention
+    from cs336_basics.p2_model.attention import MultiheadSelfAttention
     attn = MultiheadSelfAttention(d_model, num_heads)
     attn.q_proj.weight.data.copy_(q_proj_weight)
     attn.k_proj.weight.data.copy_(k_proj_weight)
@@ -202,9 +201,7 @@ def run_multihead_self_attention_with_rope(
         Float[Tensor, " ... sequence_length d_out"]: Tensor with the output of running your optimized, batched multi-headed attention
         implementation with the given QKV projection weights and input features.
     """
-    from cs336_basics.model import MultiheadSelfAttention
-    import torch
-    attn = MultiheadSelfAttention(d_model, num_heads)
+    attn = my_model.MultiheadSelfAttention(d_model, num_heads)
     attn.q_proj.weight.data = q_proj_weight
     attn.k_proj.weight.data = k_proj_weight
     attn.v_proj.weight.data = v_proj_weight
@@ -345,8 +342,7 @@ def run_transformer_block(
         Float[Tensor, "batch sequence_length d_model"] Tensor with the output of
         running the Transformer block on the input features while using RoPE.
     """
-    from cs336_basics.model import TransformerBlock
-    block = TransformerBlock(d_model, num_heads, d_ff)
+    block = my_model.TransformerBlock(d_model, num_heads, d_ff)
     # 加载权重
     block.attn.q_proj.weight.data = weights['attn.q_proj.weight']
     block.attn.k_proj.weight.data = weights['attn.k_proj.weight']
@@ -439,8 +435,7 @@ def run_transformer_lm(
         Float[Tensor, "batch_size sequence_length vocab_size"]: Tensor with the predicted unnormalized
         next-word distribution for each token.
     """
-    from cs336_basics.model import Transformer
-    model = Transformer(vocab_size, d_model, num_layers, num_heads, d_ff)
+    model = my_model.Transformer(vocab_size, d_model, num_layers, num_heads, d_ff)
     # 加载权重
     model.token_emb.weight.data = weights['token_embeddings.weight']
     for i in range(num_layers):
@@ -480,8 +475,7 @@ def run_rmsnorm(
         Float[Tensor,"... d_model"]: Tensor of with the same shape as `in_features` with the output of running
         RMSNorm of the `in_features`.
     """
-    from cs336_basics.model import RMSNorm
-    rmsnorm = RMSNorm(d_model, eps)
+    rmsnorm = my_model.RMSNorm(d_model, eps)
     rmsnorm.weight.data = weights
     return rmsnorm(in_features)
 
@@ -643,13 +637,11 @@ def run_load_checkpoint(
     raise NotImplementedError
 
 
-from cs336_basics.tokenizer import Tokenizer
-
 def get_tokenizer(
     vocab: dict[int, bytes],
     merges: list[tuple[bytes, bytes]],
     special_tokens: list[str] | None = None,
-) -> Tokenizer:
+) -> my_tokenizer.Tokenizer:
     """Given a vocabulary, a list of merges, and a list of special tokens,
     return a BPE tokenizer that uses the provided vocab, merges, and special tokens.
 
@@ -665,7 +657,7 @@ def get_tokenizer(
     Returns:
         A BPE tokenizer that uses the provided vocab, merges, and special tokens.
     """
-    return Tokenizer(vocab, merges, special_tokens)
+    return my_tokenizer.Tokenizer(vocab, merges, special_tokens)
     raise NotImplementedError
 
 

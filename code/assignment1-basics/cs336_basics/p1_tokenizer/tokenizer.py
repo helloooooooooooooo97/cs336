@@ -1,36 +1,4 @@
-
-# 构造tokenizer.py 
-import re
 from typing import List, Tuple, Dict, Iterator, IO, Optional
-
-# 返回一个Tokenizer对象，初始化时传入上述vocab、merges和special_tokens
-# Tokenizer的子函数主要有以下几个，下面通过输入输出举例说明其作用：
-
-# 1. _bpe_encode(chunk: bytes) -> List[int]
-# 作用：对一个字节串chunk进行BPE编码，返回token id的列表。
-# 输入示例: chunk = b"Hello"
-# 输出示例: [0, 1, 2, 2, 3]  # 假设vocab和merges如get_simple_tokenizer所示
-# 说明：将"Hello"按BPE规则切分并映射为token id。
-
-# 2. _get_pairs(word: List[bytes]) -> Set[Tuple[bytes, bytes]]
-# 作用：给定一个字节token的列表，返回所有相邻token对的集合。
-# 输入示例: word = [b"H", b"e", b"l", b"l", b"o"]
-# 输出示例: {(b"H", b"e"), (b"e", b"l"), (b"l", b"l"), (b"l", b"o")}
-# 说明：用于BPE合并时，找出所有可合并的token对。
-
-# 3. encode(text: str) -> List[int]
-# 作用：将字符串text编码为token id的列表，优先匹配特殊token，然后对剩余部分用BPE编码。
-# 输入示例: text = "Hello<|endoftext|>!"
-# 输出示例: [0, 1, 2, 2, 3, special_token_id, 8]
-# 说明：先识别特殊token"<|endoftext|>"，其余部分用BPE编码。
-
-# 4. decode(ids: List[int]) -> str
-# 作用：将token id的列表还原为原始字符串。
-# 输入示例: ids = [0, 1, 2, 2, 3, special_token_id, 8]
-# 输出示例: "Hello<|endoftext|>!"
-# 说明：将id映射回字节串并解码为字符串，特殊token也能还原。
-
-# 这些内部函数共同实现了Tokenizer的核心功能：高效、可控地将文本和token id互相转换，并支持BPE和特殊token机制。
 
 class Tokenizer:
     def __init__(self, vocab: Dict[int, bytes], merges: List[Tuple[bytes, bytes]], special_tokens: Optional[List[str]] = None):

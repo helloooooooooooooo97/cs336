@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from cs336_basics.tokenizer import Tokenizer
+from cs336_basics.p1_tokenizer import Tokenizer
 import json
 import os
 import resource
