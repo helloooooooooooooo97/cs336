@@ -64,10 +64,10 @@ class MultiheadSelfAttention(nn.Module):
             k = self.apply_rope(k, token_positions)
 
         # 构造因果mask
-        casual_mask = torch.triu(torch.ones(seq_len, seq_len, device=in_features.device), diagonal=1).bool()
+        casual_mask = torch.triu(torch.ones(seq_len, seq_len, device=in_features.device), diagonal=1).bool() 
         casual_mask = casual_mask[None, None, :, :]  # (1, 1, seq_len, seq_len)
 
-        # 计算注意力输出 ~casual_取反
+        # 计算注意力输出 ~casual_取反 
         output = scaled_dot_product_attention(q, k, v, ~casual_mask)
 
         # 恢复输出形状
@@ -89,7 +89,7 @@ class MultiheadSelfAttention(nn.Module):
         # 计算RoPE的频率
         inv_freq = 1.0 / (self.theta ** (torch.arange(0, d_head, 2, device=device).float() / d_head))
         # token_positions: (batch, seq) -> (batch, 1, seq, 1)
-        pos = token_positions.unsqueeze(1).unsqueeze(-1)  # (batch, 1, seq, 1)
+        pos = token_positions.unsqueeze(1).unsqueeze(-1)  # (batch, 1, seq, 1) 
         freqs = pos * inv_freq  # (batch, 1, seq, d_head//2)
         # 计算cos和sin
         cos = torch.cos(freqs)
