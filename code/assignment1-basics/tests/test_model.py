@@ -17,7 +17,6 @@ from .adapters import (
     run_embedding,
 )
 
-
 def test_linear(numpy_snapshot, ts_state_dict, in_embeddings, d_model, d_ff):
     w1_weight = ts_state_dict[0][f"layers.0.ffn.w1.weight"]
     output = run_linear(
@@ -30,8 +29,6 @@ def test_linear(numpy_snapshot, ts_state_dict, in_embeddings, d_model, d_ff):
         output
     )
 
-
-
 def test_embedding(numpy_snapshot, ts_state_dict, in_indices, vocab_size, d_model):
     embedding_weight = ts_state_dict[0][f"token_embeddings.weight"]
     output = run_embedding(
@@ -43,7 +40,6 @@ def test_embedding(numpy_snapshot, ts_state_dict, in_indices, vocab_size, d_mode
     numpy_snapshot.assert_match(
         output
     )
-
 
 def test_swiglu(numpy_snapshot, ts_state_dict, in_embeddings, d_model, d_ff):
     # reference_weights = torch.load(FIXTURES_PATH / "positionwise_feedforward_weights.pt")
@@ -185,7 +181,7 @@ def test_transformer_lm_truncated_input(
         atol=1e-4,
     )
 
-
+# TODO: 没有排查出错误原因，在精度为1e-4时候能过，在精度为1e-6的时候无法通过
 def test_transformer_block(numpy_snapshot, ts_state_dict, in_embeddings, d_model, n_heads, d_ff, n_keys, theta):
     # reference_weights = torch.load(FIXTURES_PATH / "transformer_block_weights.pt")
     # in_features = torch.load(FIXTURES_PATH / "in_features.pt")

@@ -12,10 +12,10 @@ from .swiglu import  SwiGLU
 from .linear import Linear
 
 class TransformerBlock(nn.Module):
-    def __init__(self, d_model: int, num_heads: int, d_ff: int) -> None:
+    def __init__(self, d_model: int, num_heads: int, d_ff: int, max_seq_len: int, theta: float) -> None:
         super().__init__()
         self.ln1: RMSNorm = RMSNorm(d_model)
-        self.attn: MultiheadSelfAttention = MultiheadSelfAttention(d_model, num_heads)
+        self.attn: MultiheadSelfAttention = MultiheadSelfAttention(d_model, num_heads, True, theta, max_seq_len)
         self.ln2: RMSNorm = RMSNorm(d_model)
         self.ffn: SwiGLU = SwiGLU(d_model, d_ff)
 
@@ -36,12 +36,13 @@ class Transformer(nn.Module):
         n_layers: int,
         n_heads: int,
         d_ff: int,
-        max_seq_len: int = 2048
+        max_seq_len: int,
+        theta: float 
     ) -> None:
         super().__init__()
         self.token_emb: Embedding = Embedding(vocab_size, d_model)
         # 不要用nn.ModuleList类型注释，直接用List[TransformerBlock]
-        self.layers: list[TransformerBlock] = [TransformerBlock(d_model, n_heads, d_ff) for _ in range(n_layers)]
+        self.layers: list[TransformerBlock] = [TransformerBlock(d_model, n_heads, d_ff, max_seq_len, theta) for _ in range(n_layers)]
         self.ln_f: RMSNorm = RMSNorm(d_model)
         self.lm_head: Linear = Linear(d_model, vocab_size, bias=False)
 

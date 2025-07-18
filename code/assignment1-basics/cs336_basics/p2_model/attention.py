@@ -25,7 +25,7 @@ def scaled_dot_product_attention(
     return out
 
 class MultiheadSelfAttention(nn.Module):
-    def __init__(self, d_model: int, num_heads: int, use_rope: bool = False, theta: float = 10000.0) -> None:
+    def __init__(self, d_model: int, num_heads: int, use_rope: bool = False, theta: float = 10000.0, max_seq_len: int = 2048) -> None:
         super().__init__()
         assert d_model % num_heads == 0
         self.d_model: int = d_model
@@ -37,6 +37,9 @@ class MultiheadSelfAttention(nn.Module):
         self.o_proj: Linear = Linear(d_model, d_model)
         self.use_rope: bool = use_rope
         self.theta: float = theta  # RoPE的theta参数
+        self.max_seq_len: int = max_seq_len  # 新增max_seq_len参数
+        # 预生成 inv_freq
+        self.register_buffer("inv_freq",1.0 / (self.theta ** (torch.arange(0, self.d_head, 2).float() / self.d_head)))
 
     def forward(self, in_features: torch.Tensor, token_positions: Optional[torch.Tensor] = None):
         """
@@ -44,7 +47,7 @@ class MultiheadSelfAttention(nn.Module):
         如果use_rope为True，则对q和k应用RoPE编码
         """
         seq_len = in_features.shape[-2]
-
+        
         # 分别计算q, k, v
         q = self.q_proj(in_features)  # (batch, seq_len, d_model)
         k = self.k_proj(in_features)  # (batch, seq_len, d_model)
@@ -57,8 +60,8 @@ class MultiheadSelfAttention(nn.Module):
 
         # 如果需要RoPE编码，则对q和k应用
         if self.use_rope:
-            if token_positions is None:
-                raise ValueError("使用RoPE编码时，必须提供token_positions参数")
+            if token_positions is None: # 自动生成 [0, 1, 2, ..., seq_len-1]
+                token_positions = torch.arange(seq_len, device=in_features.device).unsqueeze(0).expand(in_features.shape[0], -1)
             q = self.apply_rope(q, token_positions)
             k = self.apply_rope(k, token_positions)
 
@@ -79,17 +82,11 @@ class MultiheadSelfAttention(nn.Module):
         x: (batch, nheads, seq, d_head)
         token_positions: (batch, seq)
         """
-        # 只对最后一个维度d_head做RoPE
-        # 参考Llama实现
-        # 先构造旋转因子
         device = x.device
         d_head = self.d_head
-        seq = x.shape[2]
-        # 计算RoPE的频率
-        inv_freq = 1.0 / (self.theta ** (torch.arange(0, d_head, 2, device=device).float() / d_head))
-        # token_positions: (batch, seq) -> (batch, 1, seq, 1)
-        pos = token_positions.unsqueeze(1).unsqueeze(-1)  # (batch, 1, seq, 1) 
-        freqs = pos * inv_freq  # (batch, 1, seq, d_head//2)
+        inv_freq = torch.as_tensor(self.inv_freq, device=x.device, dtype=x.dtype)
+        pos = token_positions.unsqueeze(1).unsqueeze(-1)
+        freqs = pos * inv_freq
         # 计算cos和sin
         cos = torch.cos(freqs)
         sin = torch.sin(freqs)

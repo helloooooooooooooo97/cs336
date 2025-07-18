@@ -4,7 +4,7 @@ from .embedding import Embedding
 from .rms_norm import RMSNorm
 from .swiglu import SwiGLU
 from .transformer import Transformer, TransformerBlock
-from .model_func import silu, softmax
+from .func import silu, softmax
 
 __all__ = [
     "MultiheadSelfAttention",

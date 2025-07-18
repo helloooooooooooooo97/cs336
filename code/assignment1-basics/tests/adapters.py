@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 from torch._tensor import Tensor
 from torch._tensor import Tensor
+from torch._tensor import Tensor
 from typing import IO, Any, BinaryIO
 from collections.abc import Iterable
 from jaxtyping import Float, Int
@@ -155,8 +156,7 @@ def run_multihead_self_attention(
         Float[Tensor, " ... sequence_length d_out"]: Tensor with the output of running your optimized, batched multi-headed attention
         implementation with the given QKV projection weights and input features.
     """
-    from cs336_basics.p2_model.attention import MultiheadSelfAttention
-    attn = MultiheadSelfAttention(d_model, num_heads)
+    attn = my_model.MultiheadSelfAttention(d_model, num_heads)
     attn.q_proj.weight.data.copy_(q_proj_weight)
     attn.k_proj.weight.data.copy_(k_proj_weight)
     attn.v_proj.weight.data.copy_(v_proj_weight)
@@ -200,33 +200,13 @@ def run_multihead_self_attention_with_rope(
     Returns:
         Float[Tensor, " ... sequence_length d_out"]: Tensor with the output of running your optimized, batched multi-headed attention
         implementation with the given QKV projection weights and input features.
-    """
-    attn = my_model.MultiheadSelfAttention(d_model, num_heads)
-    attn.q_proj.weight.data = q_proj_weight
-    attn.k_proj.weight.data = k_proj_weight
-    attn.v_proj.weight.data = v_proj_weight
-    attn.o_proj.weight.data = o_proj_weight
-    # 先做QK投影
-    batch_shape = in_features.shape[:-2]
-    seq_len = in_features.shape[-2]
-    q = attn.q_proj(in_features)
-    k = attn.k_proj(in_features)
-    v = attn.v_proj(in_features)
-    # reshape为多头
-    d_head = d_model // num_heads
-    q = q.view(*batch_shape, seq_len, num_heads, d_head).transpose(-3, -2)  # (..., num_heads, seq_len, d_head)
-    k = k.view(*batch_shape, seq_len, num_heads, d_head).transpose(-3, -2)
-    # RoPE
-    if token_positions is not None:
-        q = run_rope(d_head, theta, max_seq_len, q, token_positions)
-        k = run_rope(d_head, theta, max_seq_len, k, token_positions)
-    # 继续后续注意力
-    v = v.view(*batch_shape, seq_len, num_heads, d_head).transpose(-3, -2)
-    att = torch.matmul(q, k.transpose(-2, -1)) / (d_head ** 0.5)
-    att = torch.softmax(att, dim=-1)
-    out: Tensor = torch.matmul(att, v)
-    out = out.transpose(-3, -2).contiguous().view(*batch_shape, seq_len, d_model)
-    return attn.o_proj(out)
+    """ 
+    attn = my_model.MultiheadSelfAttention(d_model, num_heads, True,theta)
+    attn.q_proj.weight.data.copy_(q_proj_weight)
+    attn.k_proj.weight.data.copy_(k_proj_weight)
+    attn.v_proj.weight.data.copy_(v_proj_weight)
+    attn.o_proj.weight.data.copy_(o_proj_weight)
+    return attn(in_features,token_positions)
 
 def run_rope(
     d_k: int,
@@ -236,39 +216,18 @@ def run_rope(
     token_positions: Int[Tensor, " ... sequence_length"],
 ) -> Float[Tensor, " ... sequence_length d_k"]:
     """
-    Run RoPE for a given input tensor.
-
-    Args:
-        d_k (int): Embedding dimension size for the query or key tensor.
-        theta (float): RoPE parameter.
-        max_seq_len (int): Maximum sequence length to pre-cache if your implementation does that.
-        in_query_or_key (Float[Tensor, "... sequence_length d_k"]): Input tensor to run RoPE on.
-        token_positions (Int[Tensor, "... sequence_length"]): Tensor of shape (batch_size, sequence_length) with the token positions
-    Returns:
-        Float[Tensor, " ... sequence_length d_k"]: Tensor with RoPEd input.
+    使用 my_model.MultiheadSelfAttention 里的 apply_rope 实现 RoPE
     """
-    import torch
-    # RoPE实现，参考 handout
-    # in_query_or_key: (..., seq_len, d_k)
-    # token_positions: (..., seq_len)
-    # 只对最后一维做旋转
-    half_dim = d_k // 2
-    seq_len = in_query_or_key.shape[-2]
-    pos = token_positions
-    # 计算旋转角度
-    inv_freq = 1.0 / (theta ** (torch.arange(0, half_dim, device=in_query_or_key.device, dtype=in_query_or_key.dtype) / half_dim))
-    sinusoid_inp = torch.einsum('... n, d -> ... n d', pos, inv_freq)  # (..., seq_len, half_dim)
-    sin = torch.sin(sinusoid_inp)
-    cos = torch.cos(sinusoid_inp)
-    x1 = in_query_or_key[..., :half_dim]
-    x2 = in_query_or_key[..., half_dim:half_dim*2]
-    # 旋转
-    out1 = x1 * cos - x2 * sin
-    out2 = x1 * sin + x2 * cos
-    out = torch.cat([out1, out2], dim=-1)
-    # 如果d_k是奇数，拼上剩下的
-    if d_k % 2 == 1:
-        out = torch.cat([out, in_query_or_key[..., -1:]], dim=-1)
+    attn = my_model.MultiheadSelfAttention(d_model=d_k, num_heads=1, use_rope=True, theta=theta, max_seq_len=max_seq_len)
+    orig_shape = in_query_or_key.shape
+    *batch_dims, seq_len, d_k_ = in_query_or_key.shape
+    x = in_query_or_key.reshape(-1, seq_len, d_k_)  # (batch, seq, d_k)
+    x = x.unsqueeze(1)  # (batch, 1, seq, d_k)
+    pos = token_positions.reshape(-1, seq_len)  # (batch, seq)
+    # 调用apply_rope
+    out: Tensor = attn.apply_rope(x, pos)  # (batch, 1, seq, d_k)
+    out = out.squeeze(1)  # (batch, seq, d_k)
+    out = out.reshape(*batch_dims, seq_len, d_k_)
     return out
 
 
@@ -281,80 +240,17 @@ def run_transformer_block(
     weights: dict[str, Tensor],
     in_features: Float[Tensor, " batch sequence_length d_model"],
 ) -> Float[Tensor, " batch sequence_length d_model"]:
-    """
-    Given the weights of a pre-norm Transformer block and input features,
-    return the output of running the Transformer block on the input features.
-
-    This function should use RoPE.
-    Depending on your implementation, you may simply need to pass the relevant args
-    to your TransformerBlock constructor, or you may need to initialize your own RoPE
-    class and pass that instead.
-
-    Args:
-        d_model (int): The dimensionality of the Transformer block input.
-        num_heads (int): Number of heads to use in multi-headed attention. `d_model` must be
-            evenly divisible by `num_heads`.
-        d_ff (int): Dimensionality of the feed-forward inner layer.
-        max_seq_len (int): Maximum sequence length to pre-cache if your implementation does that.
-        theta (float): RoPE parameter.
-        weights (dict[str, Tensor]):
-            State dict of our reference implementation.
-            The keys of this dictionary are:
-            - `attn.q_proj.weight`
-                The query projections for all `num_heads` attention heads.
-                Shape is (d_model, d_model).
-                The rows are ordered by matrices of shape (num_heads, d_k),
-                so `attn.q_proj.weight == torch.cat([q_heads.0.weight, ..., q_heads.N.weight], dim=0)`.
-            - `attn.k_proj.weight`
-                The key projections for all `num_heads` attention heads.
-                Shape is (d_model, d_model).
-                The rows are ordered by matrices of shape (num_heads, d_k),
-                so `attn.k_proj.weight == torch.cat([k_heads.0.weight, ..., k_heads.N.weight], dim=0)`.
-            - `attn.v_proj.weight`
-                The value projections for all `num_heads` attention heads.
-                Shape is (d_model, d_model).
-                The rows are ordered by matrices of shape (num_heads, d_v),
-                so `attn.v_proj.weight == torch.cat([v_heads.0.weight, ..., v_heads.N.weight], dim=0)`.
-            - `attn.output_proj.weight`
-                Weight of the multi-head self-attention output projection
-                Shape is (d_model, d_model).
-            - `ln1.weight`
-                Weights of affine transform for the first RMSNorm
-                applied in the transformer block.
-                Shape is (d_model,).
-            - `ffn.w1.weight`
-                Weight of the first linear transformation in the FFN.
-                Shape is (d_model, d_ff).
-            - `ffn.w2.weight`
-                Weight of the second linear transformation in the FFN.
-                Shape is (d_ff, d_model).
-            - `ffn.w3.weight`
-                Weight of the third linear transformation in the FFN.
-                Shape is (d_model, d_ff).
-            - `ln2.weight`
-                Weights of affine transform for the second RMSNorm
-                applied in the transformer block.
-                Shape is (d_model,).
-        in_features (Float[Tensor, "batch sequence_length d_model"]):
-            Tensor to run your implementation on.
-
-    Returns:
-        Float[Tensor, "batch sequence_length d_model"] Tensor with the output of
-        running the Transformer block on the input features while using RoPE.
-    """
-    block = my_model.TransformerBlock(d_model, num_heads, d_ff)
-    # 加载权重
+    block = my_model.TransformerBlock(d_model, num_heads, d_ff, max_seq_len, theta)
     block.attn.q_proj.weight.data = weights['attn.q_proj.weight']
     block.attn.k_proj.weight.data = weights['attn.k_proj.weight']
     block.attn.v_proj.weight.data = weights['attn.v_proj.weight']
     block.attn.o_proj.weight.data = weights['attn.output_proj.weight']
     block.ln1.weight.data = weights['ln1.weight']
     block.ffn.w1.weight.data = weights['ffn.w1.weight']
-    block.ffn.w2.weight.data = weights['ffn.w2.weight']
-    block.ffn.w3.weight.data = weights['ffn.w3.weight']
+    block.ffn.w2.weight.data = weights['ffn.w3.weight']
+    block.ffn.w3.weight.data = weights['ffn.w2.weight']
     block.ln2.weight.data = weights['ln2.weight']
     return block(in_features)
-
 
 def run_transformer_lm(
     vocab_size: int,
@@ -367,75 +263,7 @@ def run_transformer_lm(
     weights: dict[str, Tensor],
     in_indices: Int[Tensor, " batch_size sequence_length"],
 ) -> Float[Tensor, " batch_size sequence_length vocab_size"]:
-    """Given the weights of a Transformer language model and input indices,
-    return the output of running a forward pass on the input indices.
-
-    This function should use RoPE.
-
-    Args:
-        vocab_size (int): The number of unique items in the output vocabulary to be predicted.
-        context_length (int): The maximum number of tokens to process at once.
-        d_model (int): The dimensionality of the model embeddings and sublayer outputs.
-        num_layers (int): The number of Transformer layers to use.
-        num_heads (int): Number of heads to use in multi-headed attention. `d_model` must be
-            evenly divisible by `num_heads`.
-        d_ff (int): Dimensionality of the feed-forward inner layer (section 3.3).
-        rope_theta (float): The RoPE $\Theta$ parameter.
-        weights (dict[str, Tensor]): 
-            State dict of our reference implementation. {num_layers} refers to an
-            integer between `0` and `num_layers - 1` (the layer index).
-            The keys of this dictionary are:
-            - `token_embeddings.weight`
-                Token embedding matrix. Shape is (vocab_size, d_model).
-            - `layers.{num_layers}.attn.q_proj.weight`
-                The query projections for all `num_heads` attention heads.
-                Shape is (num_heads * (d_model / num_heads), d_model).
-                The rows are ordered by matrices of shape (num_heads, d_k),
-                so `attn.q_proj.weight == torch.cat([q_heads.0.weight, ..., q_heads.N.weight], dim=0)`.
-            - `layers.{num_layers}.attn.k_proj.weight`
-                The key projections for all `num_heads` attention heads.
-                Shape is (num_heads * (d_model / num_heads), d_model).
-                The rows are ordered by matrices of shape (num_heads, d_k),
-                so `attn.k_proj.weight == torch.cat([k_heads.0.weight, ..., k_heads.N.weight], dim=0)`.
-            - `layers.{num_layers}.attn.v_proj.weight`
-                The value projections for all `num_heads` attention heads.
-                Shape is (num_heads * (d_model / num_heads), d_model).
-                The rows are ordered by matrices of shape (num_heads, d_v),
-                so `attn.v_proj.weight == torch.cat([v_heads.0.weight, ..., v_heads.N.weight], dim=0)`.
-            - `layers.{num_layers}.attn.output_proj.weight`
-                Weight of the multi-head self-attention output projection
-                Shape is ((d_model / num_heads) * num_heads, d_model).
-            - `layers.{num_layers}.ln1.weight`
-                Weights of affine transform for the first RMSNorm
-                applied in the transformer block.
-                Shape is (d_model,).
-            - `layers.{num_layers}.ffn.w1.weight`
-                Weight of the first linear transformation in the FFN.
-                Shape is (d_model, d_ff).
-            - `layers.{num_layers}.ffn.w2.weight`
-                Weight of the second linear transformation in the FFN.
-                Shape is (d_ff, d_model).
-            - `layers.{num_layers}.ffn.w3.weight`
-                Weight of the third linear transformation in the FFN.
-                Shape is (d_model, d_ff).
-            - `layers.{num_layers}.ln2.weight`
-                Weights of affine transform for the second RMSNorm
-                applied in the transformer block.
-                Shape is (d_model,).
-            - `ln_final.weight`
-                Weights of affine transform for RMSNorm applied to the output of the final transformer block.
-                Shape is (d_model, ).
-            - `lm_head.weight`
-                Weights of the language model output embedding.
-                Shape is (vocab_size, d_model).
-        in_indices (Int[Tensor, "batch_size sequence_length"]) Tensor with input indices to run the language model on. Shape is (batch_size, sequence_length), where
-            `sequence_length` is at most `context_length`.
-
-    Returns:
-        Float[Tensor, "batch_size sequence_length vocab_size"]: Tensor with the predicted unnormalized
-        next-word distribution for each token.
-    """
-    model = my_model.Transformer(vocab_size, d_model, num_layers, num_heads, d_ff)
+    model = my_model.Transformer(vocab_size, d_model, num_layers, num_heads, d_ff,context_length,rope_theta)
     # 加载权重
     model.token_emb.weight.data = weights['token_embeddings.weight']
     for i in range(num_layers):
@@ -447,8 +275,8 @@ def run_transformer_lm(
         block.attn.o_proj.weight.data = weights[prefix+'attn.output_proj.weight']
         block.ln1.weight.data = weights[prefix+'ln1.weight']
         block.ffn.w1.weight.data = weights[prefix+'ffn.w1.weight']
-        block.ffn.w2.weight.data = weights[prefix+'ffn.w2.weight']
-        block.ffn.w3.weight.data = weights[prefix+'ffn.w3.weight']
+        block.ffn.w2.weight.data = weights[prefix+'ffn.w3.weight']
+        block.ffn.w3.weight.data = weights[prefix+'ffn.w2.weight']
         block.ln2.weight.data = weights[prefix+'ln2.weight']
     model.ln_f.weight.data = weights['ln_final.weight']
     model.lm_head.weight.data = weights['lm_head.weight']
@@ -641,7 +469,7 @@ def get_tokenizer(
     vocab: dict[int, bytes],
     merges: list[tuple[bytes, bytes]],
     special_tokens: list[str] | None = None,
-) -> my_tokenizer.Tokenizer:
+) -> my_tokenizer.BPETokenizer:
     """Given a vocabulary, a list of merges, and a list of special tokens,
     return a BPE tokenizer that uses the provided vocab, merges, and special tokens.
 
@@ -657,8 +485,7 @@ def get_tokenizer(
     Returns:
         A BPE tokenizer that uses the provided vocab, merges, and special tokens.
     """
-    return my_tokenizer.Tokenizer(vocab, merges, special_tokens)
-    raise NotImplementedError
+    return my_tokenizer.BPETokenizer(vocab, merges, special_tokens)
 
 
 def run_train_bpe(
@@ -667,25 +494,12 @@ def run_train_bpe(
     special_tokens: list[str],
     **kwargs,
 ) -> tuple[dict[int, bytes], list[tuple[bytes, bytes]]]:
-    """Given the path to an input corpus, run train a BPE tokenizer and
-    output its vocabulary and merges.
-
-    Args:
-        input_path (str | os.PathLike): Path to BPE tokenizer training data.
-        vocab_size (int): Total number of items in the tokenizer's vocabulary (including special tokens).
-        special_tokens (list[str]): A list of string special tokens to be added to the tokenizer vocabulary.
-            These strings will never be split into multiple tokens, and will always be
-            kept as a single token. If these special tokens occur in the `input_path`,
-            they are treated as any other string.
-
-    Returns:
-        tuple[dict[int, bytes], list[tuple[bytes, bytes]]]:
-            vocab:
-                The trained tokenizer vocabulary, a mapping from int (token ID in the vocabulary)
-                to bytes (token bytes)
-            merges:
-                BPE merges. Each list item is a tuple of bytes (<token1>, <token2>),
-                representing that <token1> was merged with <token2>.
-                Merges are ordered by order of creation.
     """
-    raise NotImplementedError
+    训练BPE分词器，返回vocab和merges。
+    """
+    from cs336_basics.p1_tokenizer import BPETrainer
+
+    # 使用BPETrainer进行BPE训练
+    trainer = BPETrainer(vocab_size=vocab_size, special_tokens=special_tokens, **kwargs)
+    vocab, merges = trainer.train(input_path)
+    return vocab, merges

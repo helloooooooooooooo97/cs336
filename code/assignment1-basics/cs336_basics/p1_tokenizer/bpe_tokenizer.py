@@ -1,6 +1,6 @@
 from typing import List, Tuple, Dict, Iterator, IO, Optional
 
-class Tokenizer:
+class BPETokenizer:
     def __init__(self, vocab: Dict[int, bytes], merges: List[Tuple[bytes, bytes]], special_tokens: Optional[List[str]] = None):
         self.id_to_token = vocab.copy()  # int -> bytes
         self.token_to_id = {v: k for k, v in vocab.items()}  # bytes -> int
