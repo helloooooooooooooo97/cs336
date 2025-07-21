@@ -16,7 +16,7 @@ class BPETokenizerBatcher:
     BYTE_VOCAB_SIZE = 256  # 字节级初始词表大小
     CHUNK_READ_SIZE = 4096  # 文件读取时的块大小
     PAT = r"""'(?:[sdmt]|ll|ve|re)| ?\p{L}+| ?\p{N}+| ?[^\s\p{L}\p{N}]+|\s+(?!\S)|\s+"""  # 分词正则
-
+    
     def __init__(self, special_tokens: list[str], num_processes: int = 4):
         self.special_tokens = special_tokens
         self.num_processes = num_processes

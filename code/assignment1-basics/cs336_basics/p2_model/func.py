@@ -1,3 +1,4 @@
+from torch._tensor import Tensor
 import torch
 
 def silu(x: torch.Tensor) -> torch.Tensor:
@@ -15,6 +16,6 @@ def softmax(x: torch.Tensor, dim: int = -1) -> torch.Tensor:
     # 为了数值稳定性，先减去最大值
     x_max = x.max(dim=dim, keepdim=True).values
     x_exp = torch.exp(x - x_max)
-    x_exp_sum = x_exp.sum(dim=dim, keepdim=True)
+    x_exp_sum: Tensor = x_exp.sum(dim=dim, keepdim=True)
     return x_exp / x_exp_sum
 

@@ -1,3 +1,6 @@
+from torch._tensor import Tensor
+
+
 import numpy
 import torch
 
@@ -17,14 +20,13 @@ def _optimize(opt_class) -> torch.Tensor:
     # Use 1000 optimization steps for testing
     for _ in range(1000):
         opt.zero_grad()
-        x = torch.rand(model.in_features)
+        x: Tensor = torch.rand(model.in_features)
         y_hat = model(x)
         y = torch.tensor([x[0] + x[1], -x[2]])
         loss = ((y - y_hat) ** 2).sum()
         loss.backward()
         opt.step()
     return model.weight.detach()
-
 
 def test_adamw(numpy_snapshot):
     """

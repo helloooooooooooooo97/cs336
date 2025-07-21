@@ -14,6 +14,7 @@ from torch import Tensor
 
 import cs336_basics.p1_tokenizer as my_tokenizer 
 import cs336_basics.p2_model as my_model
+import numpy as np
 
 # pass
 def run_linear(
@@ -201,7 +202,7 @@ def run_multihead_self_attention_with_rope(
         Float[Tensor, " ... sequence_length d_out"]: Tensor with the output of running your optimized, batched multi-headed attention
         implementation with the given QKV projection weights and input features.
     """ 
-    attn = my_model.MultiheadSelfAttention(d_model, num_heads, True,theta)
+    attn = my_model.MultiheadSelfAttention(d_model, num_heads, True,theta, max_seq_len)
     attn.q_proj.weight.data.copy_(q_proj_weight)
     attn.k_proj.weight.data.copy_(k_proj_weight)
     attn.v_proj.weight.data.copy_(v_proj_weight)
@@ -343,6 +344,20 @@ def run_get_batch(
         is the sampled input sequences, and the second tuple item is the corresponding
         language modeling labels.
     """
+    import torch
+    # 1. 随机采样batch_size个起点
+    max_start = len(dataset) - context_length -1  # 要求起点 start + context_length <= len(dataset) -1  
+    starts = np.random.randint(0, max_start + 1, size=batch_size) # [0,max_start)采样
+    
+    # 2. 构造inputs和labels
+    inputs = np.stack([dataset[i : i+context_length] for i in starts])
+    labels = np.stack([dataset[i+1 : i+context_length+1] for i in starts])
+    
+    # 3. 转为torch tensor并放到device
+    inputs = torch.tensor(inputs, dtype=torch.long, device=device)
+    labels = torch.tensor(labels, dtype=torch.long, device=device)
+    
+    return inputs, labels
     raise NotImplementedError
 
 
@@ -359,6 +374,15 @@ def run_softmax(in_features: Float[Tensor, " ..."], dim: int) -> Float[Tensor, "
         Float[Tensor, "..."]: Tensor of with the same shape as `in_features` with the output of
         softmax normalizing the specified `dim`.
     """
+
+    # 实现softmax函数，需考虑数值稳定性
+    import torch
+    # 减去最大值以防止溢出
+    max_vals, _ = in_features.max(dim=dim, keepdim=True)
+    exp_x = torch.exp(in_features - max_vals)
+    sum_exp = exp_x.sum(dim=dim, keepdim=True)
+    softmax = exp_x / sum_exp
+    return softmax
     raise NotImplementedError
 
 
@@ -375,27 +399,116 @@ def run_cross_entropy(inputs: Float[Tensor, " batch_size vocab_size"], targets: 
     Returns:
         Float[Tensor, ""]: The average cross-entropy loss across examples.
     """
+    # inputs: (batch_size, vocab_size)
+    # targets: (batch_size,)
+    # 1. 数值稳定性处理
+    logits = inputs - inputs.max(dim=1, keepdim=True).values
+    log_probs = logits - torch.log(torch.exp(logits).sum(dim=1, keepdim=True))
+    # 2. 取出每个样本的正确类别的log概率
+    nll = -log_probs[torch.arange(inputs.size(0)), targets]
+    # 3. 求平均
+    return nll.mean()
     raise NotImplementedError
 
 
 def run_gradient_clipping(parameters: Iterable[torch.nn.Parameter], max_l2_norm: float) -> None:
-    """Given a set of parameters, clip their combined gradients to have l2 norm at most max_l2_norm.
-
-    Args:
-        parameters (Iterable[torch.nn.Parameter]): collection of trainable parameters.
-        max_l2_norm (float): a positive value containing the maximum l2-norm.
-
-    The gradients of the parameters (parameter.grad) should be modified in-place.
     """
-    raise NotImplementedError
+    手动实现L2范数梯度裁剪，确保所有参数的梯度L2范数不超过max_l2_norm。
+    """
+    import torch
 
+    # 1. 收集所有有梯度的参数
+    params: list[torch.nn.Parameter] = [p for p in parameters if p.grad is not None]
+    if len(params) == 0:
+        return
+
+    # 2. 计算所有参数梯度的L2范数（与PyTorch官方实现一致）
+    norm_list: list[torch.Tensor] = [p.grad.detach().norm(2) for p in params]
+    total_norm: float = torch.norm(torch.stack(norm_list), 2).item()
+
+    # 3. 计算缩放因子并裁剪
+    clip_coef: float = max_l2_norm / (total_norm + 1e-6)
+    if clip_coef < 1.0:
+        for p in params:
+            if p.grad is not None:
+                p.grad.detach().mul_(clip_coef)
 
 def get_adamw_cls() -> type[torch.optim.Optimizer]:
     """
-    Returns a torch.optim.Optimizer that implements AdamW.
+    返回一个实现了AdamW优化器的torch.optim.Optimizer子类。
+    这里我们自定义一个AdamW实现，支持权重衰减（decoupled weight decay）。
     """
-    raise NotImplementedError
+    import torch
 
+    class MyAdamW(torch.optim.Optimizer):
+        def __init__(
+            self,
+            params,
+            lr=1e-3,
+            betas=(0.9, 0.999),
+            eps=1e-8,
+            weight_decay=0.0,
+        ):
+            if not 0.0 <= lr:
+                raise ValueError(f"Invalid learning rate: {lr}")
+            if not 0.0 <= eps:
+                raise ValueError(f"Invalid epsilon value: {eps}")
+            if not 0.0 <= betas[0] < 1.0:
+                raise ValueError(f"Invalid beta parameter at index 0: {betas[0]}")
+            if not 0.0 <= betas[1] < 1.0:
+                raise ValueError(f"Invalid beta parameter at index 1: {betas[1]}")
+            defaults = dict(lr=lr, betas=betas, eps=eps, weight_decay=weight_decay)
+            super().__init__(params, defaults)
+
+        @torch.no_grad()
+        def step(self, closure=None):
+            loss = None
+            if closure is not None:
+                with torch.enable_grad():
+                    loss = closure()
+
+            for group in self.param_groups:
+                for p in group["params"]:
+                    if p.grad is None:
+                        continue
+                    grad = p.grad
+                    if grad.is_sparse:
+                        raise RuntimeError("AdamW does not support sparse gradients")
+
+                    state = self.state[p]
+
+                    # State initialization
+                    if len(state) == 0:
+                        state["step"] = 0
+                        # Exponential moving average of gradient values
+                        state["exp_avg"] = torch.zeros_like(p, memory_format=torch.preserve_format)
+                        # Exponential moving average of squared gradient values
+                        state["exp_avg_sq"] = torch.zeros_like(p, memory_format=torch.preserve_format)
+
+                    exp_avg, exp_avg_sq = state["exp_avg"], state["exp_avg_sq"]
+                    beta1, beta2 = group["betas"]
+
+                    state["step"] += 1
+
+                    # Decoupled weight decay
+                    if group["weight_decay"] != 0:
+                        p.data = p.data.add(-group["weight_decay"] * group["lr"], p.data)
+
+                    # Adam update
+                    exp_avg.mul_(beta1).add_(grad, alpha=1 - beta1)
+                    exp_avg_sq.mul_(beta2).addcmul_(grad, grad, value=1 - beta2)
+
+                    bias_correction1 = 1 - beta1 ** state["step"]
+                    bias_correction2 = 1 - beta2 ** state["step"]
+                    denom = (exp_avg_sq.sqrt() / (bias_correction2 ** 0.5)).add_(group["eps"])
+
+                    step_size = group["lr"] / bias_correction1
+
+                    p.data.addcdiv_(exp_avg, denom, value=-step_size)
+
+            return loss
+
+    return MyAdamW
 
 def run_get_lr_cosine_schedule(
     it: int,
@@ -405,25 +518,22 @@ def run_get_lr_cosine_schedule(
     cosine_cycle_iters: int,
 ):
     """
-    Given the parameters of a cosine learning rate decay schedule (with linear
-    warmup) and an iteration number, return the learning rate at the given
-    iteration under the specified schedule.
-
-    Args:
-        it (int): Iteration number to get learning rate for.
-        max_learning_rate (float): alpha_max, the maximum learning rate for
-            cosine learning rate schedule (with warmup).
-        min_learning_rate (float): alpha_min, the minimum / final learning rate for
-            the cosine learning rate schedule (with warmup).
-        warmup_iters (int): T_w, the number of iterations to linearly warm-up
-            the learning rate.
-        cosine_cycle_iters (int): T_c, the number of cosine annealing iterations.
-
-    Returns:
-        Learning rate at the given iteration under the specified schedule.
+    给定余弦退火学习率调度（带线性预热）的参数和迭代次数，返回该迭代下的学习率。
+    先缓慢增加到max_learning_rate，再缓慢衰减到min_learning_rate，最后保持最小值
     """
-    raise NotImplementedError
-
+    if it < warmup_iters:
+        # Warm-up 阶段：线性增加学习率
+        lr = (it / warmup_iters) * max_learning_rate
+    elif it <= cosine_cycle_iters:
+        # Cosine Annealing 阶段：余弦函数衰减
+        t = it - warmup_iters
+        T = cosine_cycle_iters - warmup_iters
+        cos_value = np.cos(np.pi * t / T)
+        lr = min_learning_rate + 0.5 * (max_learning_rate - min_learning_rate) * (1 + cos_value)
+    else:
+        # Post-annealing 阶段：学习率保持最小值
+        lr = min_learning_rate
+    return lr
 
 def run_save_checkpoint(
     model: torch.nn.Module,
@@ -432,17 +542,22 @@ def run_save_checkpoint(
     out: str | os.PathLike | BinaryIO | IO[bytes],
 ):
     """
-    Given a model, optimizer, and an iteration number, serialize them to disk.
-
-    Args:
-        model (torch.nn.Module): Serialize the state of this model.
-        optimizer (torch.optim.Optimizer): Serialize the state of this optimizer.
-        iteration (int): Serialize this value, which represents the number of training iterations
-            we've completed.
-        out (str | os.PathLike | BinaryIO | IO[bytes]): Path or file-like object to serialize the model, optimizer, and iteration to.
+    给定模型、优化器和迭代次数，将它们序列化保存到磁盘或文件对象。
     """
-    raise NotImplementedError
+    import torch
 
+    # 构建要保存的字典
+    checkpoint = {
+        "model_state_dict": model.state_dict(),
+        "optimizer_state_dict": optimizer.state_dict(),
+        "iteration": iteration,
+    }
+
+    # 判断 out 是路径还是文件对象
+    if isinstance(out, (str, os.PathLike)):
+        torch.save(checkpoint, out)
+    else:
+        torch.save(checkpoint, out)
 
 def run_load_checkpoint(
     src: str | os.PathLike | BinaryIO | IO[bytes],
@@ -450,20 +565,19 @@ def run_load_checkpoint(
     optimizer: torch.optim.Optimizer,
 ):
     """
-    Given a serialized checkpoint (path or file-like object), restore the
-    serialized state to the given model and optimizer.
-    Return the number of iterations that we previously serialized in
-    the checkpoint.
-
-    Args:
-        src (str | os.PathLike | BinaryIO | IO[bytes]): Path or file-like object to serialized checkpoint.
-        model (torch.nn.Module): Restore the state of this model.
-        optimizer (torch.optim.Optimizer): Restore the state of this optimizer.
-    Returns:
-        int: the previously-serialized number of iterations.
+    加载序列化的checkpoint，恢复模型和优化器的状态，并返回迭代次数。
     """
-    raise NotImplementedError
+    import torch
 
+    # 判断 src 是路径还是文件对象
+    if isinstance(src, (str, os.PathLike)):
+        checkpoint = torch.load(src, map_location="cpu")
+    else:
+        checkpoint = torch.load(src, map_location="cpu")
+
+    model.load_state_dict(checkpoint["model_state_dict"])
+    optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
+    return checkpoint["iteration"]
 
 def get_tokenizer(
     vocab: dict[int, bytes],
@@ -486,7 +600,6 @@ def get_tokenizer(
         A BPE tokenizer that uses the provided vocab, merges, and special tokens.
     """
     return my_tokenizer.BPETokenizer(vocab, merges, special_tokens)
-
 
 def run_train_bpe(
     input_path: str | os.PathLike,
