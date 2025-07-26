@@ -1,9 +1,10 @@
+from typing import Any
+from torch._tensor import Tensor
 import numpy
 import torch
 import torch.nn.functional as F
 
 from .adapters import run_cross_entropy, run_gradient_clipping, run_softmax
-
 
 def test_softmax_matches_pytorch():
     x = torch.tensor(
@@ -13,7 +14,7 @@ def test_softmax_matches_pytorch():
             [0.1573, 0.6860, 0.1327, 0.7284, 0.6811],
         ]
     )
-    expected = F.softmax(x, dim=-1)
+    expected: Tensor = F.softmax(x, dim=-1)
     numpy.testing.assert_allclose(run_softmax(x, dim=-1).detach().numpy(), expected.detach().numpy(), atol=1e-6)
     # Test that softmax handles numerical overflow issues
     numpy.testing.assert_allclose(
@@ -21,7 +22,6 @@ def test_softmax_matches_pytorch():
         expected.detach().numpy(),
         atol=1e-6,
     )
-
 
 def test_cross_entropy():
     inputs = torch.tensor(
@@ -57,7 +57,6 @@ def test_cross_entropy():
         atol=1e-4,
     )
 
-
 def test_gradient_clipping():
     tensors = [torch.randn((5, 5)) for _ in range(6)]
     max_norm = 1e-2
@@ -76,7 +75,7 @@ def test_gradient_clipping():
     loss_c = torch.cat(t1_c).sum()
     loss_c.backward()
     run_gradient_clipping(t1_c, max_norm)
-    t1_c_grads = [torch.clone(t.grad) for t in t1_c if t.grad is not None]
+    t1_c_grads: Any = [torch.clone(t.grad) for t in t1_c if t.grad is not None]
 
     assert len(t1_grads) == len(t1_c_grads)
 

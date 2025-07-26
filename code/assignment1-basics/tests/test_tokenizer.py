@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+from cs336_basics.p1_tokenizer import Tokenizer
 import json
 import os
 import resource
 import sys
+from tiktoken.core import Encoding
 
 import psutil
 import pytest
@@ -333,7 +335,7 @@ def test_tinystories_sample_roundtrip():
 
 
 def test_tinystories_matches_tiktoken():
-    reference_tokenizer = tiktoken.get_encoding("gpt2")
+    reference_tokenizer: Encoding = tiktoken.get_encoding("gpt2")
     tokenizer = get_tokenizer_from_vocab_merges_path(
         vocab_path=VOCAB_PATH, merges_path=MERGES_PATH, special_tokens=["<|endoftext|>"]
     )
@@ -366,7 +368,7 @@ def test_encode_special_token_trailing_newlines():
 
 def test_encode_special_token_double_newline_non_whitespace():
     reference_tokenizer = tiktoken.get_encoding("gpt2")
-    tokenizer = get_tokenizer_from_vocab_merges_path(
+    tokenizer: Tokenizer = get_tokenizer_from_vocab_merges_path(
         vocab_path=VOCAB_PATH, merges_path=MERGES_PATH, special_tokens=["<|endoftext|>"]
     )
     corpus_path = FIXTURES_PATH / "special_token_double_newlines_non_whitespace.txt"
@@ -378,7 +380,6 @@ def test_encode_special_token_double_newline_non_whitespace():
 
     assert tokenizer.decode(ids) == corpus_contents
     assert reference_tokenizer.decode(reference_ids) == corpus_contents
-
 
 def test_encode_iterable_tinystories_sample_roundtrip():
     tokenizer = get_tokenizer_from_vocab_merges_path(
@@ -462,3 +463,8 @@ def _encode(tokenizer, text):
     for just this function. We set the memory limit to 1MB.
     """
     return tokenizer.encode(text)
+
+def test_pass():
+    print(1+1)
+    # 测试1+1是否等于2
+    assert 1 + 1 == 2

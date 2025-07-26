@@ -6,7 +6,6 @@ import pytest
 
 from .adapters import run_get_batch
 
-
 def test_get_batch():
     dataset = np.arange(0, 100)
     context_length = 7
